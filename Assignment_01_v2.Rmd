@@ -1,0 +1,999 @@
+---
+title: "DATA 621 Assignment 1"
+author: "Philip Tanofsky"
+date: "9/13/2020"
+output: html_document
+---
+
+## Assignment 1
+
+The goal of this assignment is to create a linear regression model of baseball team statistics to predict the number of wins for a given team.
+
+
+Following example: http://www.sthda.com/english/articles/40-regression-analysis/168-multiple-linear-regression-in-r/#:~:text=Multiple%20linear%20regression%20is%20an,distinct%20predictor%20variables%20(x).&text=The%20%E2%80%9Cb%E2%80%9D%20values%20are%20called,weights%20(or%20beta%20coefficients).
+
+Following approach here, too: https://machinelearningmastery.com/machine-learning-in-r-step-by-step/
+
+```{r libraries}
+library(tidyverse)
+library(ggplot2)
+library(GGally)
+library(caret)
+library(ggExtra)
+```
+
+
+```{r}
+# Read in CSV file of training dat
+mb_train_init <- read.csv("moneyball-training-data.csv")
+```
+
+```{r}
+# Dimensions of the dataset
+dim(mb_train_init)
+```
+
+- 2276 instances
+- 17 variables (1 index, 1 dependent variable, 15 independent variables)
+
+```{r}
+# list types of each attribute
+sapply(mb_train_init, class)
+```
+
+- Data type for every variable is integer. Makes sense given the statistical nature of the data. Statistics are expected to be whole number integers.
+
+```{r}
+# first five rows
+head(mb_train_init)
+```
+
+Outputting first 5 instances for simple visual inspection. Initial observation, TEAM_BATTING_HBP is NA (not available) for each instance. Will need further investigation.
+
+```{r}
+# summary
+summary(mb_train_init)
+```
+
+Display summary of all the variables (statistics)
+
+#### Variables containing at least one NA value
+
+- TEAM_BATTING_SO
+- TEAM_BASERUN_SB
+- TEAM_BASERUN_CS
+- TEAM_BATTING_HBP (majority of instances contain NA)
+- TEAM_PITCHING_SO
+- TEAM_FIELDING_DP
+
+#### Interesting observations
+
+- Minimum number of wins is 0: Given a 162 game schedule, I don't believe 0 wins is a realistic value
+- Maximum number of wins is 146: Given a 162 game schedule, this is an unrealistic number. Most wins by a MLB team is 116. 1906 Chicago Cubs and 2001 Seattle Mariners
+- Maximum number of TEAM_PITCHING_H is 30132: This indicates a team gave up over 180 hits per game. That's completely urealistic.
+- Maximum number of TEAM_PITCHING_SO is 19278: This indicates a team achieved 119 striketouts per game. Literally impossible.
+
+
+```{r}
+# More Visualize
+ggpairs(mb_train_init[,3:7], color="gray20")
+```
+
+Not much value in above visualization
+
+```{r}
+p1 <- ggplot(mb_train_init, aes(x=TEAM_BATTING_H, y=TARGET_WINS)) + 
+  geom_point() +
+  geom_smooth(method=lm) + 
+  labs(x = "Batting Hits", y = "Wins", title="Wins by Total Hits")
+```
+
+```{r}
+# Scatterplot with density plot
+ggMarginal(p1, type = "density")
+```
+
+```{r}
+# Scatterplot with boxplot
+ggMarginal(p1, type = "boxplot")
+```
+
+```{r}
+p2 <- ggplot(mb_train_init, aes(x=TEAM_BATTING_2B, y=TARGET_WINS)) + 
+  geom_point()+
+  geom_smooth(method=lm) + 
+  labs(x = "Batting Doubles", y = "Wins", title="Wins by Doubles")
+```
+
+```{r}
+# Scatterplot with density plot
+ggMarginal(p2, type = "density")
+```
+
+```{r}
+# Scatterplot with boxplot
+ggMarginal(p2, type = "boxplot")
+```
+
+```{r}
+p3 <- ggplot(mb_train_init, aes(x=TEAM_BATTING_3B, y=TARGET_WINS)) + 
+  geom_point()+
+  geom_smooth(method=lm) + 
+  labs(x = "Batting Triples", y = "Wins", title="Wins by Triples")
+```
+
+```{r}
+# Scatterplot with density plot
+ggMarginal(p3, type = "density")
+```
+
+```{r}
+# Scatterplot with boxplot
+ggMarginal(p3, type = "boxplot")
+```
+
+```{r}
+p4 <- ggplot(mb_train_init, aes(x=TEAM_BATTING_HR, y=TARGET_WINS)) + 
+  geom_point()+
+  geom_smooth(method=lm) + 
+  labs(x = "Batting Home Runs", y = "Wins", title="Wins by Home Runs")
+```
+
+```{r}
+# Scatterplot with density plot
+ggMarginal(p4, type = "density")
+```
+
+```{r}
+# Scatterplot with boxplot
+ggMarginal(p4, type = "boxplot")
+```
+
+```{r}
+p5 <- ggplot(mb_train_init, aes(x=TEAM_BATTING_BB, y=TARGET_WINS)) + 
+  geom_point()+
+  geom_smooth(method=lm) + 
+  labs(x = "Batting Walks", y = "Wins", title="Wins by Walks")
+```
+
+```{r}
+# Scatterplot with density plot
+ggMarginal(p5, type = "density")
+```
+
+```{r}
+# Scatterplot with boxplot
+ggMarginal(p5, type = "boxplot")
+```
+
+```{r}
+p6 <- ggplot(mb_train_init, aes(x=TEAM_BATTING_SO, y=TARGET_WINS)) + 
+  geom_point()+
+  geom_smooth(method=lm) + 
+  labs(x = "Batting Strikeouts", y = "Wins", title="Wins by Strikeouts")
+```
+
+```{r}
+# Scatterplot with density plot
+ggMarginal(p6, type = "density")
+```
+
+```{r}
+# Scatterplot with boxplot
+ggMarginal(p6, type = "boxplot")
+```
+
+```{r}
+p7 <- ggplot(mb_train_init, aes(x=TEAM_BATTING_HBP, y=TARGET_WINS)) + 
+  geom_point()+
+  geom_smooth(method=lm) + 
+  labs(x = "Batting HBP", y = "Wins", title="Wins by HBP")
+```
+
+```{r}
+# Scatterplot with density plot
+ggMarginal(p7, type = "density")
+```
+
+```{r}
+# Scatterplot with boxplot
+ggMarginal(p7, type = "boxplot")
+```
+
+```{r}
+p8 <- ggplot(mb_train_init, aes(x=TEAM_BASERUN_SB, y=TARGET_WINS)) + 
+  geom_point()+
+  geom_smooth(method=lm) + 
+  labs(x = "Base running Stolen Bases", y = "Wins", title="Wins by Stolen Bases")
+```
+
+```{r}
+# Scatterplot with density plot
+ggMarginal(p8, type = "density")
+```
+
+```{r}
+# Scatterplot with boxplot
+ggMarginal(p8, type = "boxplot")
+```
+
+```{r}
+p9 <- ggplot(mb_train_init, aes(x=TEAM_BASERUN_CS, y=TARGET_WINS)) + 
+  geom_point()+
+  geom_smooth(method=lm) + 
+  labs(x = "Base running Caught Stealing", y = "Wins", title="Wins by Caught Stealing")
+```
+
+```{r}
+# Scatterplot with density plot
+ggMarginal(p9, type = "density")
+```
+
+```{r}
+# Scatterplot with boxplot
+ggMarginal(p9, type = "boxplot")
+```
+
+```{r}
+p10 <- ggplot(mb_train_init, aes(x=TEAM_PITCHING_H, y=TARGET_WINS)) + 
+  geom_point()+
+  geom_smooth(method=lm) + 
+  labs(x = "Pitching Hits Allowed", y = "Wins", title="Wins by Hits Allowed")
+```
+
+```{r}
+# Scatterplot with density plot
+ggMarginal(p10, type = "density")
+```
+
+```{r}
+# Scatterplot with boxplot
+ggMarginal(p10, type = "boxplot")
+```
+
+```{r}
+p11 <- ggplot(mb_train_init, aes(x=TEAM_PITCHING_HR, y=TARGET_WINS)) + 
+  geom_point()+
+  geom_smooth(method=lm) + 
+  labs(x = "Pitching Home Runs Allowed", y = "Wins", title="Wins by Home Runs Allowed")
+```
+
+```{r}
+# Scatterplot with density plot
+ggMarginal(p11, type = "density")
+```
+
+```{r}
+# Scatterplot with boxplot
+ggMarginal(p11, type = "boxplot")
+```
+
+```{r}
+p12 <- ggplot(mb_train_init, aes(x=TEAM_PITCHING_BB, y=TARGET_WINS)) + 
+  geom_point()+
+  geom_smooth(method=lm) + 
+  labs(x = "Pitching Walks Allowed", y = "Wins", title="Wins by Walks Allowed")
+```
+
+```{r}
+# Scatterplot with density plot
+ggMarginal(p12, type = "density")
+```
+
+```{r}
+# Scatterplot with boxplot
+ggMarginal(p12, type = "boxplot")
+```
+
+```{r}
+p13 <- ggplot(mb_train_init, aes(x=TEAM_PITCHING_SO, y=TARGET_WINS)) + 
+  geom_point()+
+  geom_smooth(method=lm) + 
+  labs(x = "Pitching Strikeouts", y = "Wins", title="Wins by Strikeouts")
+```
+
+```{r}
+# Scatterplot with density plot
+ggMarginal(p13, type = "density")
+```
+
+```{r}
+# Scatterplot with boxplot
+ggMarginal(p13, type = "boxplot")
+```
+
+```{r}
+p14 <- ggplot(mb_train_init, aes(x=TEAM_FIELDING_E, y=TARGET_WINS)) + 
+  geom_point()+
+  geom_smooth(method=lm) + 
+  labs(x = "Fielding Errors", y = "Wins", title="Wins by Errors Commited")
+```
+
+```{r}
+# Scatterplot with density plot
+ggMarginal(p14, type = "density")
+```
+
+```{r}
+# Scatterplot with boxplot
+ggMarginal(p14, type = "boxplot")
+```
+
+```{r}
+p15 <- ggplot(mb_train_init, aes(x=TEAM_FIELDING_DP, y=TARGET_WINS)) + 
+  geom_point()+
+  geom_smooth(method=lm) + 
+  labs(x = "Fielding Double Plays", y = "Wins", title="Wins by Defensive Double Plays")
+```
+
+```{r}
+# Scatterplot with density plot
+ggMarginal(p15, type = "density")
+```
+
+```{r}
+# Scatterplot with boxplot
+ggMarginal(p15, type = "boxplot")
+```
+
+## Data Exploration Notes
+
+- Very few entries for Batting HBP, consider ignoring that attribute all together
+- TEAM_PITCHING_H (consider removing everything above 2000 ... 1620 is 10 hits allowed for EVERY game)
+- TEAM_PITCHING_BB (consider removing everything above 1000)
+- TEAM_PITCHING_SO (consider removing everything above 2000)
+- Apparently there is a team with 0 wins, see how many rows exist like that
+
+```{r}
+# Consider all hits as one variable: total bases
+
+# First, identify the number of singles as Hits represents all hit types combined
+mb_train_init$TEAM_BATTING_1B <- mb_train_init$TEAM_BATTING_H - mb_train_init$TEAM_BATTING_2B - mb_train_init$TEAM_BATTING_3B - mb_train_init$TEAM_BATTING_HR
+
+mb_train_init$TOTAL_BASES <-  mb_train_init$TEAM_BATTING_1B 
+
+mb_train_init$TOTAL_BASES <- (mb_train_init$TEAM_BATTING_2B * 2) + mb_train_init$TOTAL_BASES
+
+mb_train_init$TOTAL_BASES <- (mb_train_init$TEAM_BATTING_3B * 3) + mb_train_init$TOTAL_BASES
+
+mb_train_init$TOTAL_BASES <- (mb_train_init$TEAM_BATTING_HR * 4) + mb_train_init$TOTAL_BASES
+
+head(mb_train_init)
+```
+
+```{r}
+ggplot(mb_train_init, aes(x=TOTAL_BASES, y=TARGET_WINS)) + 
+  geom_point()+
+  geom_smooth(method=lm)
+```
+
+
+```{r}
+# How many instances have 0 wins
+zero_wins <- subset(mb_train_init, TARGET_WINS == 0)
+
+head(zero_wins)
+# Appears to be 1 instance has zero wins
+# Looking at the data, appears bogus
+```
+
+```{r}
+# Remove really bad pitching
+bad_pitching <-subset(mb_train_init, TEAM_PITCHING_H > 2000)
+
+summary(bad_pitching)
+
+dim(bad_pitching)
+# Result is 257 entries, that seems like a lot of bad pitching
+```
+
+```{r}
+# Most wins in a season is 116, so let's see how many instance exist above that number
+too_many_wins <- subset(mb_train_init, TARGET_WINS > 116)
+
+summary(too_many_wins)
+
+dim(too_many_wins)
+# Answer is 17
+```
+
+```{r linear_model}
+# Note: I have not included BATTING HBP because this causes over 2000 observations to be removed
+model <- lm(TARGET_WINS ~ TEAM_BATTING_1B + TEAM_BATTING_2B + TEAM_BATTING_3B + TEAM_BATTING_HR +
+              TEAM_BATTING_BB + TEAM_BATTING_SO + TEAM_BASERUN_SB + TEAM_BASERUN_CS +
+              TEAM_PITCHING_H + TEAM_PITCHING_HR + TEAM_PITCHING_BB + TEAM_PITCHING_SO + TEAM_FIELDING_E + 
+              TEAM_FIELDING_DP, 
+            data=mb_train_init)
+
+summary(model)
+```
+
+```{r accuracy_assessment}
+
+sigma(model) / mean(mb_train_init$TARGET_WINS)
+
+```
+
+
+```{r}
+# Note: Only include significant variables
+model_sig <- lm(TARGET_WINS ~ TEAM_BATTING_2B + TEAM_BATTING_3B +
+              TEAM_BASERUN_SB + TEAM_BASERUN_CS +
+              TEAM_FIELDING_E + 
+              TEAM_FIELDING_DP, 
+            data=mb_train_init)
+
+summary(model_sig)
+```
+
+```{r}
+
+sigma(model_sig) / mean(mb_train_init$TARGET_WINS)
+
+```
+
+```{r}
+# Replace all hits as total bases
+model_tb <- lm(TARGET_WINS ~ TOTAL_BASES +
+              TEAM_BATTING_BB + TEAM_BATTING_SO + TEAM_BASERUN_SB + TEAM_BASERUN_CS +
+              TEAM_PITCHING_H + TEAM_PITCHING_HR + TEAM_PITCHING_BB + TEAM_PITCHING_SO + TEAM_FIELDING_E + 
+              TEAM_FIELDING_DP, 
+            data=mb_train_init)
+
+summary(model_tb)
+# Did not prove helpful, but leave for now
+```
+
+```{r}
+
+sigma(model_tb) / mean(mb_train_init$TARGET_WINS)
+
+```
+
+
+
+The lower the RSE, the more accurate the model
+
+Overall, the F-statistic p-value: < 2.2e-16, which is highly significant
+
+Added all the potential predictor variables, so the results show these variables are significant based on checking to see if t-value is significantly different from zero ... those that match significance
+
+TEAM_FIELDING_E  -0.17204    0.04140  -4.155 5.08e-05 ***
+TEAM_FIELDING_DP -0.10819    0.03654  -2.961  0.00349 **
+TEAM_BATTING_3B  -0.10118    0.07751  -1.305  0.19348 
+TEAM_BATTING_BB  -4.45969    3.63624  -1.226  0.22167
+TEAM_BASERUN_SB   0.03304    0.02867   1.152  0.25071
+TEAM_BATTING_HBP  0.08247    0.04960   1.663  0.09815
+TEAM_PITCHING_BB  4.51089    3.63372   1.241  0.21612 
+
+
+# So let's start removing some data from the data based on questionable data
+
+- Remove the BATTING HBP column
+- Remove all entries with too many wins
+- Remove all entries with too many pitching hits allowed
+- Remove the instance with zero wins
+
+```{r}
+
+# Drop column for Batting HBP
+mb_train_init_clean <- subset(mb_train_init, select = -c(TEAM_BATTING_HBP)) 
+
+# Remove entries with too many wins
+mb_train_init_clean <- subset(mb_train_init_clean, TARGET_WINS <= 116)
+
+# Remove entries with zero wins (1 total)
+mb_train_init_clean <- subset(mb_train_init_clean, TARGET_WINS != 0)
+
+# Remove entries with too many hits allowed
+mb_train_init_clean <- subset(mb_train_init_clean, TEAM_PITCHING_H < 2000)
+
+summary(mb_train_init_clean)
+
+dim(mb_train_init_clean)
+```
+
+
+## Split the initial training data into train and validation
+
+```{r}
+# https://machinelearningmastery.com/machine-learning-in-r-step-by-step/
+
+# create a list of 80% of the rows in the original dataset we can use for training
+validation_index <- createDataPartition(mb_train_init_clean$TARGET_WINS, p=0.80, list=FALSE)
+# select 20% of the data for validation
+mb_valid_clean <- mb_train_init_clean[-validation_index,]
+# use the remaining 80% of data to training and testing the models
+mb_train_clean <- mb_train_init_clean[validation_index,]
+
+```
+
+## Attempt linear model on cleaned data
+
+```{r}
+model_clean <- lm(TARGET_WINS ~ TEAM_BATTING_1B + TEAM_BATTING_2B + TEAM_BATTING_3B + TEAM_BATTING_HR +
+              TEAM_BATTING_BB + TEAM_BATTING_SO + TEAM_BASERUN_SB + TEAM_BASERUN_CS +
+              TEAM_PITCHING_H + TEAM_PITCHING_HR + TEAM_PITCHING_BB + TEAM_PITCHING_SO + TEAM_FIELDING_E + 
+              TEAM_FIELDING_DP, 
+            data=mb_train_clean,
+            na.action = na.omit)
+
+summary(model_clean)
+```
+
+```{r}
+sig <- sigma(model_clean)
+
+sig
+
+sig / mean(mb_train_clean$TARGET_WINS)
+```
+
+## Stepwise improvement of cleaned dataset
+
+```{r}
+# STEP 1
+# Removed TEAM_BATTING_SO
+model_clean_st1 <- lm(TARGET_WINS ~ TEAM_BATTING_1B + TEAM_BATTING_2B + TEAM_BATTING_3B + TEAM_BATTING_HR +
+              TEAM_BATTING_BB + TEAM_BASERUN_SB + TEAM_BASERUN_CS +
+              TEAM_PITCHING_H + TEAM_PITCHING_HR + TEAM_PITCHING_BB + TEAM_PITCHING_SO + TEAM_FIELDING_E + 
+              TEAM_FIELDING_DP, 
+            data=mb_train_clean,
+            na.action = na.omit)
+
+summary(model_clean_st1)
+```
+
+```{r}
+sig <- sigma(model_clean_st1)
+
+sig
+
+sig / mean(mb_train_clean$TARGET_WINS)
+
+```
+
+```{r}
+# STEP 2
+# Removed TEAM_PITCHING_H
+model_clean_st2 <- lm(TARGET_WINS ~ TEAM_BATTING_1B + TEAM_BATTING_2B + TEAM_BATTING_3B + TEAM_BATTING_HR +
+              TEAM_BATTING_BB + TEAM_BASERUN_SB + TEAM_BASERUN_CS +
+              TEAM_PITCHING_HR + TEAM_PITCHING_BB + TEAM_PITCHING_SO + TEAM_FIELDING_E + 
+              TEAM_FIELDING_DP, 
+            data=mb_train_clean,
+            na.action = na.omit)
+
+summary(model_clean_st2)
+```
+
+```{r}
+sig <- sigma(model_clean_st2)
+
+sig
+
+sig / mean(mb_train_clean$TARGET_WINS)
+
+```
+
+
+```{r eval=FALSE}
+AIC(model_clean_st2)
+```
+
+```{r eval=FALSE}
+BIC(model_clean_st2)
+```
+
+```{r}
+# STEP 3
+# Removed TEAM_BATTING_HR
+model_clean_st3 <- lm(TARGET_WINS ~ TEAM_BATTING_1B + TEAM_BATTING_2B + TEAM_BATTING_3B +
+              TEAM_BATTING_BB + TEAM_BASERUN_SB + TEAM_BASERUN_CS +
+              TEAM_PITCHING_HR + TEAM_PITCHING_BB + TEAM_PITCHING_SO + TEAM_FIELDING_E + 
+              TEAM_FIELDING_DP, 
+            data=mb_train_clean,
+            na.action = na.omit)
+
+summary(model_clean_st3)
+```
+
+```{r}
+sig <- sigma(model_clean_st3)
+
+sig
+
+sig / mean(mb_train_clean$TARGET_WINS)
+
+```
+
+Continually the best result is Step 3
+
+```{r}
+# STEP 4
+# Removed TEAM_PITCHING_BB
+model_clean_st4 <- lm(TARGET_WINS ~ TEAM_BATTING_1B + TEAM_BATTING_2B + TEAM_BATTING_3B +
+              TEAM_BATTING_BB + TEAM_BASERUN_SB + TEAM_BASERUN_CS +
+              TEAM_PITCHING_HR + TEAM_PITCHING_SO + TEAM_FIELDING_E + 
+              TEAM_FIELDING_DP, 
+            data=mb_train_clean,
+            na.action = na.omit)
+
+summary(model_clean_st4)
+```
+
+```{r}
+sig <- sigma(model_clean_st4)
+
+sig
+
+sig / mean(mb_train_clean$TARGET_WINS)
+
+```
+
+```{r}
+plot(model_clean_st4)
+```
+
+```{r}
+# Graph residuals
+
+ggplot(data=model_clean_st3, aes(model_clean_st3$residuals)) +
+  geom_histogram(binwidth = 1, color = "black", fill = "purple4") +
+  theme(panel.background = element_rect(fill = "white"),
+        axis.line.x=element_line(),
+        axis.line.y=element_line()) +
+  ggtitle("Histogram for Model Residuals")
+```
+
+```{r}
+# Run the step wise approach using the stepAIC function
+library(MASS)
+stepmodel <- stepAIC(model_clean, direction = c("both"), trace = FALSE)
+
+summary(stepmodel)
+
+sig <- sigma(stepmodel)
+
+sig
+
+sig / mean(mb_train_clean$TARGET_WINS)
+
+plot(stepmodel)
+```
+
+## Impute missing data
+https://www.analyticsvidhya.com/blog/2016/03/tutorial-powerful-packages-imputing-missing-values/
+
+Using package MICE
+
+```{r}
+library(mice)
+```
+
+```{r eval=FALSE}
+
+# SKIP THIS SECTION
+
+# Impute the missing data
+mb_train_init_imputed <- mice(mb_train_init, m=5, maxit=50, method='pmm', seed=500)
+
+
+summary(mb_train_init_imputed)
+
+mb_train_imp_2 <- complete(mb_train_init_imputed,2)
+
+# create a list of 80% of the rows in the original dataset we can use for training
+validation_index <- createDataPartition(mb_train_imp_2$TARGET_WINS, p=0.80, list=FALSE)
+# select 20% of the data for validation
+mb_valid_imp <- mb_train_imp_2[-validation_index,]
+# use the remaining 80% of data to training and testing the models
+mb_train_imp <- mb_train_imp_2[validation_index,]
+```
+
+
+```{r eval=FALSE}
+# output one of the imputed dataframes
+complete_data_2 <- complete(mb_train_init_imputed,2)
+
+head(complete_data_2)
+```
+
+```{r eval=FALSE}
+head(mb_train_init)
+```
+
+```{r eval=FALSE}
+# build predictive model
+fit <- with(data=mb_train_init_imputed, exp = lm(TARGET_WINS ~ TEAM_BATTING_H + TEAM_BATTING_2B + TEAM_BATTING_3B + 
+                                              TEAM_BATTING_HR + TEAM_BATTING_BB + TEAM_BASERUN_SB + 
+                                              TEAM_BASERUN_CS + TEAM_PITCHING_HR + TEAM_PITCHING_BB + 
+                                              TEAM_PITCHING_SO + TEAM_FIELDING_E + TEAM_FIELDING_DP, 
+                                            data=mb_train_clean,
+                                            na.action = na.omit))
+
+summary(fit)
+```
+
+```{r eval=FALSE}
+# combine results of all 5 models
+pooled <- pool(fit)
+summary(pooled)
+```
+
+```{r eval=FALSE}
+# https://stackoverflow.com/questions/52713733/how-to-use-predict-function-with-my-pooled-results-from-mice
+
+
+# Copy one of the fitted lm models fit to
+#   one of the imputed datasets
+pooled_lm = fit$analyses[[1]]
+# Replace the fitted coefficients with the pooled
+#   estimates (need to check they are replaced in
+#   the correct order)
+pooled_lm$coefficients = summary(pooled)$estimate
+
+# Predict - predictions seem to match the
+#   pooled coefficients rather than the original
+#   lm that was copied
+# predict(fit$analyses[[1]], newdata = nhanes)
+wins_pred_imp <- predict(pooled_lm, newdata = mb_valid_imp)
+
+wins_pred_imp
+
+actual_preds_imp <- data.frame(cbind(actuals=mb_valid_imp$TARGET_WINS, predicteds=wins_pred_imp))
+
+# actual_preds_imp <- subset(actual_preds_imp, predicteds > 0)
+
+actual_preds_imp
+```
+
+```{r eval=FALSE}
+correlation_accuracy <- cor(actual_preds_imp)
+
+correlation_accuracy
+```
+
+```{r eval=FALSE}
+mape <- MAPE(actual_preds_imp$predicteds, actual_preds_imp$actuals)
+
+# lower is better
+# mape 0.1397487 after removal of negative wins
+# 0.3172925 with the negative scores
+mape
+```
+
+## Run against evaluation data
+```{r}
+# Read in CSV file of evaluation data
+mb_eval <- read.csv("moneyball-evaluation-data.csv")
+```
+
+```{r}
+# Dimensions of the dataset
+dim(mb_eval)
+```
+
+```{r}
+# list types of each attribute
+sapply(mb_eval, class)
+```
+
+```{r}
+# first five rows
+head(mb_eval)
+```
+
+```{r}
+# summary
+summary(mb_eval)
+```
+
+```{r}
+# Impute the date for the missing validation data
+# Impute the missing data
+mb_valid_clean_imputed <- mice(mb_valid_clean, m=5, maxit=50, method='pmm', seed=500)
+
+
+summary(mb_valid_clean_imputed)
+
+mb_valid_clean_imputed_2 <- complete(mb_valid_clean_imputed,2)
+
+# create a list of 80% of the rows in the original dataset we can use for training
+#validation_index <- createDataPartition(mb_train_imp_2$TARGET_WINS, p=0.80, list=FALSE)
+# select 20% of the data for validation
+#mb_valid_imp <- mb_train_imp_2[-validation_index,]
+# use the remaining 80% of data to training and testing the models
+#mb_train_imp <- mb_train_imp_2[validation_index,]
+```
+
+
+```{r eval=FALSE}
+# output one of the imputed dataframes
+complete_data_2 <- complete(mb_train_init_imputed,2)
+
+head(complete_data_2)
+```
+
+```{r}
+library(Metrics)
+library(MLmetrics)
+# switched mb_eval to mb_valid_clean - I want to see how good predictions are on known target wins
+
+mb_valid_clean <- mb_valid_clean[complete.cases(mb_valid_clean), ]
+
+wins_pred <- predict(model_clean_st3, mb_valid_clean_imputed_2)
+
+# wins_pred
+
+wins_pred_neg <- subset(wins_pred, wins_pred < 0)
+
+wins_pred_neg
+
+rmse <- rmse(mb_valid_clean_imputed_2$TARGET_WINS, wins_pred)
+
+rmse
+
+mape <- MAPE(mb_valid_clean_imputed_2$TARGET_WINS, wins_pred)
+
+mape
+```
+
+Need to add code to output the results at runtime: These are previous results
+
+- RMSE: 15.09709
+
+- MAPE: 0.2541715
+
+```{r}
+wins_pred <- predict(stepmodel, mb_valid_clean_imputed_2)
+
+# wins_pred
+
+rmse <- rmse(mb_valid_clean_imputed_2$TARGET_WINS, wins_pred)
+
+rmse
+
+mape <- MAPE(mb_valid_clean_imputed_2$TARGET_WINS, wins_pred)
+
+mape
+```
+
+Need to add code to output the results at runtime: These are previous results
+
+- RMSE: 15.09709
+
+- MAPE: 0.2541715
+
+```{r}
+# http://r-statistics.co/Linear-Regression.html
+actual_preds <- data.frame(cbind(actuals=mb_valid_clean_imputed_2$TARGET_WINS, predicteds=wins_pred))
+correlation_accuracy <- cor(actual_preds)
+
+correlation_accuracy
+
+# actual_preds
+
+```
+
+
+
+
+
+## Extra attempts at initial model
+
+```{r eval=FALSE}
+# STEP 2 TB (using Total Bases instead of hits individually)
+# Removed TEAM_PITCHING_H
+model_clean_st2tb <- lm(TARGET_WINS ~ TOTAL_BASES +
+              TEAM_BATTING_BB + TEAM_BASERUN_SB + TEAM_BASERUN_CS +
+              TEAM_PITCHING_HR + TEAM_PITCHING_BB + TEAM_PITCHING_SO + TEAM_FIELDING_E + 
+              TEAM_FIELDING_DP, 
+            data=mb_train_clean,
+            na.action = na.omit)
+
+summary(model_clean_st2tb)
+```
+
+```{r eval=FALSE}
+
+sigma(model_clean_st2tb) / mean(mb_train_clean$TARGET_WINS)
+
+```
+
+```{r eval=FALSE}
+# STEP 3 TB
+# Removed TEAM_PITCHING_BB
+model_clean_st3tb <- lm(TARGET_WINS ~ TOTAL_BASES +
+              TEAM_BATTING_BB + TEAM_BASERUN_SB + TEAM_BASERUN_CS +
+              TEAM_PITCHING_HR + TEAM_PITCHING_SO + TEAM_FIELDING_E + 
+              TEAM_FIELDING_DP, 
+            data=mb_train_clean,
+            na.action = na.omit)
+
+summary(model_clean_st3tb)
+# Got worse
+```
+
+```{r eval=FALSE}
+
+sigma(model_clean_st3tb) / mean(mb_train_clean$TARGET_WINS)
+
+```
+
+```{r eval=FALSE}
+# STEP 3 - Got worse
+# Removed TEAM_BATTING_HR
+model_clean_st3 <- lm(TARGET_WINS ~ TEAM_BATTING_H + TEAM_BATTING_2B + TEAM_BATTING_3B +
+              TEAM_BATTING_BB + TEAM_BASERUN_SB + TEAM_BASERUN_CS +
+              TEAM_PITCHING_HR + TEAM_PITCHING_BB + TEAM_PITCHING_SO + TEAM_FIELDING_E + 
+              TEAM_FIELDING_DP, 
+            data=mb_train_clean,
+            na.action = na.omit)
+
+summary(model_clean_st3)
+```
+
+```{r eval=FALSE}
+
+sigma(model_clean_st3) / mean(mb_train_clean$TARGET_WINS)
+
+```
+
+
+```{r eval=FALSE}
+
+fitted(model_clean)
+
+```
+
+
+```{r model_2, eval=FALSE}
+model_2 <- lm(TARGET_WINS ~ TEAM_BATTING_3B + TEAM_BATTING_BB + TEAM_BASERUN_SB + TEAM_BATTING_HBP + 
+                TEAM_PITCHING_BB + TEAM_FIELDING_E + TEAM_FIELDING_DP, 
+              data=mb_train)
+
+summary(model_2)
+```
+
+```{r accuracy_assessment_2, eval=FALSE}
+
+sigma(model_2) / mean(mb_train$TARGET_WINS)
+
+```
+
+Got worse ... ha, I knew some of the hitting would need to be included
+
+Add up all the hits for total bases
+
+http://www.philsbaseball.com/Articles/2010_to_2014/2014/September/total_base_percentage.php#:~:text=Here%20is%20the%20formula%3A%20Total,4)%20by%20at%2Dbats.
+Here is the formula: Total Bases + walks + hit-by-pitches + stolen bases – caught stealing divided by plate appearances. 
+
+```{r model_TB, eval=FALSE}
+model_TB <- lm(TARGET_WINS ~ TOTAL_BASES +
+              TEAM_BATTING_BB + TEAM_BATTING_SO + TEAM_BASERUN_SB + TEAM_BASERUN_CS + TEAM_BATTING_HBP +
+              TEAM_PITCHING_H + TEAM_PITCHING_HR + TEAM_PITCHING_BB + TEAM_PITCHING_SO + TEAM_FIELDING_E + 
+              TEAM_FIELDING_DP, 
+            data=mb_train)
+
+summary(model_TB)
+
+sigma(model_TB) / mean(mb_train$TARGET_WINS)
+```
+
+```{r eval=FALSE}
+mb_train$TOTAL_BASES_PLUS <- mb_train$TEAM_BATTING_BB + mb_train$TOTAL_BASES
+
+head(mb_train)
+```
+
+```{r model_TB_plus, eval=FALSE}
+model_TB_plus <- lm(TARGET_WINS ~ TOTAL_BASES_PLUS +
+              TEAM_BATTING_SO + TEAM_BASERUN_SB + TEAM_BASERUN_CS + TEAM_BATTING_HBP +
+              TEAM_PITCHING_H + TEAM_PITCHING_HR + TEAM_PITCHING_BB + TEAM_PITCHING_SO + TEAM_FIELDING_E + 
+              TEAM_FIELDING_DP, 
+            data=mb_train)
+
+summary(model_TB_plus)
+
+sigma(model_TB_plus) / mean(mb_train$TARGET_WINS)
+```
